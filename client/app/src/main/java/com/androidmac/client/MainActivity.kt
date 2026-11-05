@@ -7,10 +7,8 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.RadioGroup
-import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -39,14 +37,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var ipInputLayout: TextInputLayout
     private lateinit var connectButton: Button
     private lateinit var connectionMode: RadioGroup
-    private lateinit var resolutionSpinner: Spinner
-    private lateinit var bitrateSpinner: Spinner
-
-    // Resolution scale factors corresponding to the string-array entries
-    private val scaleFactors = floatArrayOf(1.0f, 0.75f, 0.5f)
-
-    // Bitrate values in bps corresponding to the string-array entries
-    private val bitrateValues = intArrayOf(8_000_000, 4_000_000, 2_000_000, 1_000_000)
 
     private var discovery: NsdDiscovery? = null
     private var discoveryJob: Job? = null
@@ -64,25 +54,6 @@ class MainActivity : AppCompatActivity() {
         ipInputLayout = findViewById(R.id.ipInputLayout)
         connectButton = findViewById(R.id.connectButton)
         connectionMode = findViewById(R.id.connectionMode)
-        resolutionSpinner = findViewById(R.id.resolutionSpinner)
-        bitrateSpinner = findViewById(R.id.bitrateSpinner)
-
-        // 解析度選擇下拉選單
-        ArrayAdapter.createFromResource(
-            this, R.array.resolution_options, android.R.layout.simple_spinner_item
-        ).also { adapter ->
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            resolutionSpinner.adapter = adapter
-        }
-
-        // 畫質選擇下拉選單
-        ArrayAdapter.createFromResource(
-            this, R.array.bitrate_options, android.R.layout.simple_spinner_item
-        ).also { adapter ->
-            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            bitrateSpinner.adapter = adapter
-        }
-
         connectButton.setOnClickListener { onConnectClicked() }
 
         // WiFi / USB 模式切換
@@ -162,13 +133,9 @@ class MainActivity : AppCompatActivity() {
                 val controlClient = ControlClient()
                 val metrics = resources.displayMetrics
 
-                // 套用解析度縮放（維持比例，H.264 要求偶數寬高）
-                val scale = scaleFactors[resolutionSpinner.selectedItemPosition]
-                val scaledWidth = ((metrics.widthPixels * scale).toInt() and -2) // round down to even
-                val scaledHeight = ((metrics.heightPixels * scale).toInt() and -2)
-                val bitrate = bitrateValues[bitrateSpinner.selectedItemPosition]
+                // The Mac app decides the streamed resolution and bitrate; send the native size.
                 val serverHello = controlClient.connect(
-                    host, port, scaledWidth, scaledHeight, metrics.densityDpi, connectionType, bitrate
+                    host, port, metrics.widthPixels, metrics.heightPixels, metrics.densityDpi, connectionType
                 )
 
                 Log.d(TAG, "Handshake complete: $serverHello")

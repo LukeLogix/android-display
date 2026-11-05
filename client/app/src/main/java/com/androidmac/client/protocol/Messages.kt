@@ -10,8 +10,7 @@ data class ClientHello(
     val screen: ScreenInfo,
     val capabilities: List<String>,
     val codecs: List<String>,
-    val connectionType: String = "wifi",
-    val bitrate: Int = 0
+    val connectionType: String = "wifi"
 ) {
     fun toJson(): String {
         val obj = JSONObject()
@@ -25,9 +24,6 @@ data class ClientHello(
         obj.put("codecs", JSONArray(codecs))
         if (connectionType != "wifi") {
             obj.put("connectionType", connectionType)
-        }
-        if (bitrate > 0) {
-            obj.put("bitrate", bitrate)
         }
         return obj.toString()
     }

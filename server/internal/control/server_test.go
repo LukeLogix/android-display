@@ -10,7 +10,7 @@ import (
 )
 
 func TestHandshake(t *testing.T) {
-	srv, err := NewServer(0) // port 0 = random available port
+	srv, err := NewServer(0, 0.75, 4_000_000) // port 0 = random available port
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestHandshake(t *testing.T) {
 	// Step 1: Send ClientHello
 	hello := protocol.ClientHello{
 		Device:       "Tab S6 Lite",
-		Screen:       protocol.ScreenInfo{Width: 2000, Height: 1200, DPI: 224},
+		Screen:       protocol.ScreenInfo{Width: 2304, Height: 1020, DPI: 224},
 		Capabilities: []string{"touch", "pen"},
 		Codecs:       []string{"h264"},
 	}
@@ -54,8 +54,12 @@ func TestHandshake(t *testing.T) {
 	if response.Codec != "h264" {
 		t.Errorf("expected codec h264, got %s", response.Codec)
 	}
-	if response.VirtualDisplay.Width != 2000 {
-		t.Errorf("expected width 2000, got %d", response.VirtualDisplay.Width)
+	// Server applies its scale and rounds down to even dimensions (1020*0.75 = 765 → 764).
+	if response.VirtualDisplay.Width != 1728 || response.VirtualDisplay.Height != 764 {
+		t.Errorf("expected 1728x764, got %dx%d", response.VirtualDisplay.Width, response.VirtualDisplay.Height)
+	}
+	if response.Bitrate != 4_000_000 {
+		t.Errorf("expected bitrate 4000000, got %d", response.Bitrate)
 	}
 	if response.StreamPort == 0 {
 		t.Error("stream port should not be 0")
@@ -76,13 +80,16 @@ func TestHandshake(t *testing.T) {
 		if client.UDPPort != 12345 {
 			t.Errorf("expected UDP port 12345, got %d", client.UDPPort)
 		}
+		if client.Width != 1728 || client.Height != 764 || client.Bitrate != 4_000_000 {
+			t.Errorf("client conn has %dx%d @ %d, want 1728x764 @ 4000000", client.Width, client.Height, client.Bitrate)
+		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for client ready callback")
 	}
 }
 
 func TestHandshakeTimeout(t *testing.T) {
-	srv, err := NewServer(0)
+	srv, err := NewServer(0, 1, 8_000_000)
 	if err != nil {
 		t.Fatalf("failed to create server: %v", err)
 	}

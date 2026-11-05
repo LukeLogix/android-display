@@ -7,17 +7,4 @@
     <string name="notification_connected">已連線</string>
     <string name="notification_connecting">連線中…</string>
     <string name="notification_stats_format">已連線 | FPS: %1$.0f | 丟包: %2$.1f%%</string>
-    <string name="resolution_label">解析度</string>
-    <string-array name="resolution_options">
-        <item>100%（原始）</item>
-        <item>75%</item>
-        <item>50%</item>
-    </string-array>
-    <string name="bitrate_label">畫質</string>
-    <string-array name="bitrate_options">
-        <item>8 Mbps（高畫質）</item>
-        <item>4 Mbps</item>
-        <item>2 Mbps</item>
-        <item>1 Mbps（省頻寬）</item>
-    </string-array>
 </resources>

@@ -15,6 +15,10 @@ type ClientConn struct {
 	Conn    net.Conn
 	Hello   protocol.ClientHello
 	UDPPort int // actual UDP port reported by the client via ClientReady (0 for USB)
+	// Negotiated stream parameters (also sent to the client in ServerHello).
+	Width   int
+	Height  int
+	Bitrate int
 }
 
 type Server struct {
@@ -24,11 +28,13 @@ type Server struct {
 	streamPort int
 	touchPort  int
 	videoPort  int // TCP video port for USB mode
+	scale      float64
+	bitrate    int
 	onClient   func(ClientConn)
 	done       chan struct{}
 }
 
-func NewServer(port int) (*Server, error) {
+func NewServer(port int, scale float64, bitrate int) (*Server, error) {
 	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
@@ -36,8 +42,15 @@ func NewServer(port int) (*Server, error) {
 	return &Server{
 		listener:   ln,
 		streamPort: 5001,
+		scale:      scale,
+		bitrate:    bitrate,
 		done:       make(chan struct{}),
 	}, nil
+}
+
+// scaleEven scales a dimension and rounds down to an even number (H.264 requirement).
+func scaleEven(v int, scale float64) int {
+	return int(float64(v)*scale) &^ 1
 }
 
 func (s *Server) Addr() string {
@@ -108,18 +121,17 @@ func (s *Server) handleConn(conn net.Conn) {
 		}
 	}
 
-	// Step 2: Send ServerHello
-	bitrate := hello.Bitrate
-	if bitrate <= 0 {
-		bitrate = 8_000_000 // default
-	}
+	// Step 2: Send ServerHello with the server-chosen size and bitrate
+	width := scaleEven(hello.Screen.Width, s.scale)
+	height := scaleEven(hello.Screen.Height, s.scale)
+	log.Printf("stream config: %dx%d @ %d bps (scale %.2f)", width, height, s.bitrate, s.scale)
 	response := protocol.ServerHello{
 		VirtualDisplay: protocol.DisplayInfo{
-			Width:  hello.Screen.Width,
-			Height: hello.Screen.Height,
+			Width:  width,
+			Height: height,
 		},
 		Codec:      codec,
-		Bitrate:    bitrate,
+		Bitrate:    s.bitrate,
 		FPS:        60,
 		StreamPort: s.streamPort,
 		TouchPort:  s.touchPort,
@@ -149,7 +161,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	// Clear the read deadline after successful handshake.
 	conn.SetReadDeadline(time.Time{})
 
-	client := ClientConn{Conn: conn, Hello: hello, UDPPort: ready.UDPPort}
+	client := ClientConn{Conn: conn, Hello: hello, UDPPort: ready.UDPPort, Width: width, Height: height, Bitrate: s.bitrate}
 	s.mu.Lock()
 	s.clients = append(s.clients, client)
 	s.mu.Unlock()

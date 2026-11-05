@@ -1,13 +1,14 @@
 package protocol
 
-// ClientHello is sent by Android to Mac during handshake
+// ClientHello is sent by Android to Mac during handshake.
+// Screen carries the device's native resolution; the server decides the
+// streamed size and bitrate and reports them back in ServerHello.
 type ClientHello struct {
 	Device         string     `json:"device"`
 	Screen         ScreenInfo `json:"screen"`
 	Capabilities   []string   `json:"capabilities"`
 	Codecs         []string   `json:"codecs"`
 	ConnectionType string     `json:"connectionType,omitempty"` // "wifi" (default) or "usb"
-	Bitrate        int        `json:"bitrate,omitempty"`        // requested bitrate in bps, 0 = server default
 }
 
 // IsUSB returns true if the client is connected via USB/ADB.

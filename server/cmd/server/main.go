@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -34,6 +35,17 @@ var adbManager *adb.Manager
 var tcpVideoServer *stream.TCPVideoServer
 
 func main() {
+	scale := flag.Float64("scale", 1.0, "streamed resolution as a fraction of the device's native screen (0.25-1)")
+	bitrate := flag.Int("bitrate", defaultBitrate, "video bitrate in bits per second")
+	exitOnStdinEOF := flag.Bool("exit-on-stdin-eof", false, "shut down when stdin closes (set by the Mac app so the server dies with it)")
+	flag.Parse()
+	if *scale < 0.25 || *scale > 1 {
+		log.Fatalf("-scale must be between 0.25 and 1, got %v", *scale)
+	}
+	if *bitrate <= 0 {
+		log.Fatalf("-bitrate must be positive, got %d", *bitrate)
+	}
+
 	log.Println("android-mac server starting...")
 
 	// 1. Start touch TCP server (auto-assign port)
@@ -86,7 +98,7 @@ func main() {
 	log.Printf("mDNS advertising on port %d", controlPort)
 
 	// 5. Start TCP control server
-	ctrlServer, err := control.NewServer(controlPort)
+	ctrlServer, err := control.NewServer(controlPort, *scale, *bitrate)
 	if err != nil {
 		log.Fatalf("control server failed: %v", err)
 	}
@@ -96,13 +108,7 @@ func main() {
 
 	// 6. On client connect → start the capture-encode-stream pipeline
 	ctrlServer.OnClient(func(client control.ClientConn) {
-		w := client.Hello.Screen.Width
-		h := client.Hello.Screen.Height
-		bitrate := client.Hello.Bitrate
-		if bitrate <= 0 {
-			bitrate = defaultBitrate
-		}
-		log.Printf("client requested bitrate: %d bps", bitrate)
+		w, h, bitrate := client.Width, client.Height, client.Bitrate
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -139,6 +145,12 @@ func main() {
 	// 7. Wait for SIGINT/SIGTERM
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	if *exitOnStdinEOF {
+		go func() {
+			io.Copy(io.Discard, os.Stdin)
+			sig <- syscall.SIGTERM
+		}()
+	}
 	<-sig
 	log.Println("shutting down...")
 
