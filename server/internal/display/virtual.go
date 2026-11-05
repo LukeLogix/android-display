@@ -4,6 +4,15 @@ package display
 #cgo CFLAGS: -x objective-c -fobjc-arc -I../../bridge
 #cgo LDFLAGS: -framework CoreGraphics -framework Foundation
 #include "../../bridge/display_bridge.h"
+#include <CoreGraphics/CoreGraphics.h>
+
+static CGError SetDisplayOrigin(CGDirectDisplayID id, int x, int y) {
+	CGDisplayConfigRef cfg;
+	CGError err = CGBeginDisplayConfiguration(&cfg);
+	if (err != kCGErrorSuccess) return err;
+	CGConfigureDisplayOrigin(cfg, id, x, y);
+	return CGCompleteDisplayConfiguration(cfg, kCGConfigureForSession);
+}
 */
 import "C"
 import (
@@ -67,6 +76,21 @@ func (d *VirtualDisplay) Width() int {
 // Height returns the pixel height of the virtual display.
 func (d *VirtualDisplay) Height() int {
 	return d.height
+}
+
+// Origin returns the display's current top-left position in global coordinates.
+func (d *VirtualDisplay) Origin() (x, y int) {
+	b := C.CGDisplayBounds(C.CGDirectDisplayID(d.displayID))
+	return int(b.origin.x), int(b.origin.y)
+}
+
+// SetOrigin moves the display to the given global position (macOS snaps it
+// to an edge of the existing arrangement if it would not touch another display).
+func (d *VirtualDisplay) SetOrigin(x, y int) error {
+	if err := C.SetDisplayOrigin(C.CGDirectDisplayID(d.displayID), C.int(x), C.int(y)); err != C.kCGErrorSuccess {
+		return fmt.Errorf("configure display origin: CGError %d", int(err))
+	}
+	return nil
 }
 
 // Close destroys the virtual display and releases all associated resources.

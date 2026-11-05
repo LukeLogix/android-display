@@ -95,9 +95,10 @@ VirtualDisplayResult CreateVirtualDisplay(VirtualDisplayConfig config) {
             [descriptor setValue:@((unsigned int)config.width) forKey:@"maxPixelsWide"];
             [descriptor setValue:@((unsigned int)config.height) forKey:@"maxPixelsHigh"];
 
-            // Set serialNum if the property exists
+            // A fixed non-zero serial gives the display a stable UUID, so macOS
+            // remembers its arrangement across reconnects (serial 0 → random UUID).
             @try {
-                [descriptor setValue:@(0) forKey:@"serialNum"];
+                [descriptor setValue:@(0x414E4452) forKey:@"serialNum"]; // "ANDR"
             } @catch (NSException *e) {
                 // serialNum may not exist on all versions, ignore
             }

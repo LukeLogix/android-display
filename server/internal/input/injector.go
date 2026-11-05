@@ -18,7 +18,6 @@ type DisplayBounds struct {
 // mouse actions and posts them via the Quartz Event Services API.
 type Injector struct {
 	displayID uint32
-	bounds    DisplayBounds
 }
 
 // NewInjector creates a new Injector targeting the given display.
@@ -30,32 +29,31 @@ func NewInjector(displayID uint32) *Injector {
 		log.Println("and add this application to enable touch input.")
 	}
 
-	cb := C.GetDisplayBounds(C.uint32_t(displayID))
-	inj := &Injector{
-		displayID: displayID,
-		bounds: DisplayBounds{
-			X:      float64(cb.x),
-			Y:      float64(cb.y),
-			Width:  float64(cb.width),
-			Height: float64(cb.height),
-		},
-	}
+	inj := &Injector{displayID: displayID}
+	b := inj.bounds()
 	log.Printf("injector: display 0x%x bounds: (%.0f,%.0f) %.0fx%.0f",
-		displayID, inj.bounds.X, inj.bounds.Y, inj.bounds.Width, inj.bounds.Height)
+		displayID, b.X, b.Y, b.Width, b.Height)
 	return inj
 }
 
-// ToScreenCoords converts normalised (0..1) coordinates to absolute
-// screen coordinates within the injector's display bounds.
-func (inj *Injector) ToScreenCoords(nx, ny float32) (float64, float64) {
-	x := inj.bounds.X + float64(nx)*inj.bounds.Width
-	y := inj.bounds.Y + float64(ny)*inj.bounds.Height
-	return x, y
+// bounds returns the display's current global bounds. It is queried per event
+// because macOS may move the display after creation (restoring the saved
+// arrangement, or the user rearranging it in System Settings).
+func (inj *Injector) bounds() DisplayBounds {
+	cb := C.GetDisplayBounds(C.uint32_t(inj.displayID))
+	return DisplayBounds{
+		X:      float64(cb.x),
+		Y:      float64(cb.y),
+		Width:  float64(cb.width),
+		Height: float64(cb.height),
+	}
 }
 
-// Bounds returns the display bounds used by this injector.
-func (inj *Injector) Bounds() DisplayBounds {
-	return inj.bounds
+// ToScreenCoords converts normalised (0..1) coordinates to absolute
+// screen coordinates within the display's current bounds.
+func (inj *Injector) ToScreenCoords(nx, ny float32) (float64, float64) {
+	b := inj.bounds()
+	return b.X + float64(nx)*b.Width, b.Y + float64(ny)*b.Height
 }
 
 // MouseMove posts a mouse-moved event at the normalised coordinates.

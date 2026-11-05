@@ -9,7 +9,9 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/luke/android-mac/server/internal/adb"
 	"github.com/luke/android-mac/server/internal/capture"
@@ -205,6 +207,25 @@ func startPipelineCommon(ctx context.Context, cancel context.CancelFunc, width, 
 	defer vd.Close()
 	log.Printf("virtual display created: 0x%x (%dx%d)", vd.DisplayID(), width, height)
 
+	// macOS places a new virtual display at a default spot; put it back where the
+	// user last arranged it. The position is saved whenever it changes (polled,
+	// since a SIGTERM restart exits without running this function's defers).
+	if x, y, ok := loadDisplayOrigin(); ok {
+		if err := vd.SetOrigin(x, y); err != nil {
+			log.Printf("restore display position: %v", err)
+		} else {
+			log.Printf("display position restored: (%d,%d)", x, y)
+		}
+	}
+	stopTracking := make(chan struct{})
+	trackingDone := make(chan struct{})
+	go trackDisplayOrigin(vd, stopTracking, trackingDone)
+	// Registered after vd.Close, so it runs first: tracking stops before the display is destroyed.
+	defer func() {
+		close(stopTracking)
+		<-trackingDone
+	}()
+
 	// Input injector + gesture recognizer for this display
 	injector := input.NewInjector(vd.DisplayID())
 	gesture := input.NewGestureRecognizer(func(me input.MouseEvent) {
@@ -291,4 +312,69 @@ func startPipelineCommon(ctx context.Context, cancel context.CancelFunc, width, 
 	log.Println("pipeline active (video + touch)")
 	<-ctx.Done()
 	log.Println("pipeline stopping...")
+}
+
+// trackDisplayOrigin saves the display's position whenever the user moves it,
+// and once more when stop is closed.
+func trackDisplayOrigin(vd *display.VirtualDisplay, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
+	lastX, lastY := vd.Origin()
+	save := func() {
+		x, y := vd.Origin()
+		if x == lastX && y == lastY {
+			return
+		}
+		if err := saveDisplayOrigin(x, y); err != nil {
+			log.Printf("save display position: %v", err)
+			return
+		}
+		lastX, lastY = x, y
+		log.Printf("display position saved: (%d,%d)", x, y)
+	}
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			save()
+			return
+		case <-ticker.C:
+			save()
+		}
+	}
+}
+
+// displayOriginPath is where the virtual display's last position is stored.
+func displayOriginPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "AndroidDisplay", "display-origin"), nil
+}
+
+func loadDisplayOrigin() (x, y int, ok bool) {
+	path, err := displayOriginPath()
+	if err != nil {
+		return 0, 0, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	if _, err := fmt.Sscanf(string(data), "%d %d", &x, &y); err != nil {
+		return 0, 0, false
+	}
+	return x, y, true
+}
+
+func saveDisplayOrigin(x, y int) error {
+	path, err := displayOriginPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(fmt.Sprintf("%d %d\n", x, y)), 0o644)
 }
