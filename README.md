@@ -70,12 +70,25 @@ Install the APK on your Android device:
 adb install client/app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Mac App (optional)
+
+`mac-app/` is a SwiftUI front-end that bundles the server, picks the streamed resolution (as a fraction of the device screen) and bitrate, shows connection status, and stops the server on quit:
+
+```bash
+mac-app/build.sh   # installs ~/Applications/AndroidDisplay.app
+```
+
+Grant the app Accessibility and Screen Recording permission. `build.sh` signs with a local `AndroidDisplay Local Signing` certificate when it exists in the keychain, so the grants survive rebuilds; otherwise it signs ad hoc and macOS asks again after each build. The server log is at `~/Library/Logs/AndroidDisplay.log`.
+
+The virtual display keeps a stable identity, and its last position (System Settings → Displays → Arrange) is saved to `~/Library/Application Support/AndroidDisplay/display-origin` and restored on the next connection.
+
 ## Usage
 
-1. **Start the Mac server:**
+1. **Start the Mac server** (or open `AndroidDisplay.app`):
    ```bash
-   ./server/android-display-server
+   ./server/android-display-server -scale 0.75 -bitrate 4000000
    ```
+   `-scale` (0.25–1, default 1) sets the streamed resolution relative to the device's native screen; `-bitrate` defaults to 8 Mbps. Both are chosen on the Mac — the Android app only reports its native resolution.
 
 2. **Open the Android app** on your tablet — it will auto-discover the Mac via mDNS
 

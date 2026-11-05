@@ -31,3 +31,4 @@ drawing/
 # OS
 .DS_Store
 Thumbs.db
+mac-app/build/
